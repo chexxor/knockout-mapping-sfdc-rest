@@ -1,0 +1,9 @@
+In a word
+------------
+Using Knockout.js and its Mapping plugin on a Visualforce page to access custom REST endpoints in a Salesforce org.
+
+Goal
+----
+The goal is to make a faster way to browse, filter, and perform CRUD operations on records in a Salesforce database. Knockout.js is an MVVM Javascript framework that binds DOM elements to properties of a Javascript object. This makes it easy for a developer to stay in Javascript land, adding functionality without worrying about how to update the view.
+
+
