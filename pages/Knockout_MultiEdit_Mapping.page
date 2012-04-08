@@ -1,0 +1,449 @@
+<apex:page >
+
+    <apex:includeScript value="{!$Resource.knockout200debug}"/>
+    <!--<apex:includeScript value="http://ajax.cdnjs.com/ajax/libs/json2/20110223/json2.js"/>-->
+    <apex:includeScript value="https://ajax.googleapis.com/ajax/libs/jquery/1.7.1/jquery.min.js"/>
+    <apex:includeScript value="{!URLFOR($Resource.forcetk)}"/>
+    <apex:includeScript value="{!URLFOR($Resource.koMapping20Debug)}"/>
+    <!--<apex:includeScript value="{!URLFOR($Resource.sObjectSerializer)}"/>-->
+
+    <style>
+        .leadTable {
+            border-collapse: collapse;
+        }
+        .leadTable th, .leadTable td {
+            padding: 5px;
+            border: 1px solid black;
+        }
+        
+        .btn[type="button"] {
+            float: right;
+            margin: 10px;
+        }
+    </style>
+
+    <apex:pageBlock mode="edit" title="Multi Edit Block">
+        <apex:pageBlockSection title="Filters" collapsible="true" columns="2">
+            <apex:outputPanel >
+                <label for="filterFirstName">First Name: </label>
+                <input name="filterFirstName" type="text" data-bind="value: filterFirstName"/>
+            </apex:outputPanel>
+            <apex:outputPanel >
+                <label for="filterLastName">Last Name: </label>
+                <input name="filterLastName" type="text" data-bind="value: filterLastName"/>
+            </apex:outputPanel>
+            <apex:outputPanel >
+                <label for="filterCompany">Company: </label>
+                <input name="filterCompany" type="text" data-bind="value: filterCompany"/>
+            </apex:outputPanel>
+            <apex:outputPanel >
+                <label for="filterCity">City: </label>
+                <input name="filterCity" type="text" data-bind="value: filterCity"/>
+            </apex:outputPanel>
+            <apex:outputPanel >
+                <label for="filterState">State: </label>
+                <input name="filterState" type="text" data-bind="value: filterState"/>
+            </apex:outputPanel>
+            <apex:outputPanel >
+                <label for="filterToday">Today: </label>
+                <input name="filterToday" type="checkbox" data-bind="checked: filterToday"/>
+            </apex:outputPanel>
+            <input class="btn" type="button" value="Filter" data-bind="click: actionUpdateCache"/>
+        </apex:pageBlockSection>
+        <apex:pageBlockSection title="Existing Leads" collapsible="true" columns="2">
+            <div class="leadTableWrapper">
+                <table class="leadTable">
+                    <thead><tr>
+                        <th>Id</th>
+                        <th>First Name</th>
+                        <th>Last Name</th>
+                        <th>Company</th>
+                        <th>City</th>
+                        <th>State</th>
+                        <th>Action</th>
+                    </tr></thead>
+                    <tbody data-bind="foreach: cacheLeads">
+                        <tr class="leadRow">
+                            <td class="leadField id" data-bind="text: Id ? Id : 'new'"></td>
+                            <td class="leadField firstName" data-bind="text: FirstName"></td>
+                            <td class="leadField lastName" data-bind="text: LastName"></td>
+                            <td class="leadField company" data-bind="text: Company"></td>
+                            <td class="leadField city" data-bind="text: City"></td>
+                            <td class="leadField state" data-bind="text: State"></td>
+                            <td class="leadButton delete"><a class="saveBtn" data-bind="click: $root.actionDestroyItem">Delete</a></td>
+                        </tr>    
+                    </tbody>
+                </table>
+                <div>
+                    <input class="btn" type="button" value="Save List" data-bind="click: persistCache"/>
+                </div>
+            </div>
+        </apex:pageBlockSection>
+        <apex:pageBlockSection title="New Lead Entry" collapsible="true" columns="2">
+            <apex:outputPanel >
+                <label for="newFirstName">First Name: </label>
+                <input name="newFirstName" type="text" data-bind="value: newFirstName"/>
+            </apex:outputPanel>
+            <apex:outputPanel >
+                <label for="newLastName">Last Name: </label>
+                <input id="newLastName" name="lastName" type="text" data-bind="value: newLastName"/>
+            </apex:outputPanel>
+            <apex:outputPanel >
+                <label for="newCompany">Company: </label>
+                <input id="newCompany" name="company" type="text" data-bind="value: newCompany"/>
+            </apex:outputPanel>
+            <apex:outputPanel >
+                <label for="newCityState">City, State: </label>
+                <select id="newCityState" name="city" data-bind="options: leadAddresses, optionsText: function(item) {return item.city + ' ' + item.state}, value: selectedAddress"/>
+            </apex:outputPanel>
+            <input class="btn" type="button" value="Add" data-bind="click: actionAddToCache"/>
+        </apex:pageBlockSection>
+        <apex:pageBlockSection title="Debug Info" collapsible="true" columns="2">
+            <div>
+                <h2>Success: <a data-bind="click: actionClearSuccessAjax">Clear</a></h2>
+                <p data-bind="text: successAjax"></p>
+                <h2>Errors: <a data-bind="click: actionClearErrorsAjax">Clear</a></h2>
+                <p data-bind="text: errorsAjax"></p>
+                <h2>Log: <a data-bind="click: actionClearLogAjax">Clear</a></h2>
+                <ul data-bind="foreach: log">
+                    <li data-bind="text: $data"></li>
+                </ul>
+            </div>
+        </apex:pageBlockSection>
+        
+    </apex:pageBlock>
+    
+    
+    <script>
+        // Util function
+        Array.prototype.clean = function(deleteValue) {
+          for (var i = 0; i < this.length; i++) {
+            if (this[i] == deleteValue) {         
+              this.splice(i, 1);
+              i--;
+            }
+          }
+          return this;
+        };
+        
+        // Extension function to the mapping plugin.
+        // This function adds missing fields to a JS object, based on the specified dataModel as a minimal required set of properties.
+        (function () {
+            ko.mapping.addMissingProps = function(jsObject, dataModel) {
+                if (arguments.length < 2) throw new Error("When calling ko.mapping.addMissingProps, pass: the updated data and the data model.");
+                if (!jsObject) throw new Error("The jsObject is undefined.");
+                if (!dataModel) throw new Error("The dataModel is undefined.");
+        
+                for (var stdProp in dataModel) {
+                    if (!(stdProp in jsObject)) {
+                        jsObject[stdProp] = "";
+                    }
+                }
+        
+                return jsObject;
+            }
+        
+            ko.exportSymbol('ko.mapping.addMissingProps', ko.mapping.addMissingProps);
+        })();
+    
+        
+        //Data struct for picklist
+        function Address(city, state) {
+            var self = this;
+            self.city = city;
+            self.state = state;
+        }
+        
+        //Connection methods to server
+        var forceDmlClient = function() {
+            var self = this;
+            self.client = (function() {
+                var myClient = new forcetk.Client();
+                myClient.setSessionToken('{!$Api.Session_ID}');
+                return myClient;
+            })();
+            
+            self.updateCache = function(filter, succCb, errCb) {
+                //Clean params.
+                if (typeof filter.filterFirstName === 'undefined') filterFirstName = '';
+                    else filterFirstName = filter.filterFirstName;
+                if (typeof filter.filterLastName === 'undefined') filterLastName = '';
+                    else filterLastName = filter.filterLastName;
+                if (typeof filter.filterCompany === 'undefined') filterCompany = '';
+                    else filterCompany = filter.filterCompany;
+                if (typeof filter.filterCity  === 'undefined') filterCity = '';
+                    else filterCity = filter.filterCity;
+                if (typeof filter.filterState === 'undefined') filterState = null;
+                    else filterState = filter.filterState;
+                if (typeof filter.filterToday === 'undefined') filterToday = '';
+                    else filterToday = filter.filterToday;
+                
+                //Add to header and send to server.
+                var headerMap = {
+                    filterFirstName: filterFirstName,
+                    filterLastName: filterLastName,
+                    filterCompany: filterCompany,
+                    filterCity: filterCity,
+                    filterState: filterState,
+                    filterToday: filterToday
+                };
+                self.client.apexrest(//Note: Unsure if my version of apexrest made it to upstream forcetk.
+                    '/Lead',//endpointUrl
+                    succCb,//callback
+                    errCb,//error
+                    'GET',//method
+                    null,//payload
+                    headerMap,//paramMap
+                    true//retry
+                );
+            };
+            
+            self.filterNotDestroyed = function(objArray) {
+                var notDestroyedElements = [];
+                console.log('filteringNot', objArray);
+                
+                for (var i = 0; i < objArray.length; i++) {
+                    var obj = objArray[i];
+                    if (typeof obj['_destroy'] === "undefined") {
+                        notDestroyedElements.push(obj);
+                    }
+                }
+                
+                console.log('returning notDestroyed', notDestroyedElements);
+                return notDestroyedElements;
+            };
+            
+            self.filterDestroyed = function(objArray) {
+                var destroyedElements = [];
+                console.log('filtering', objArray);
+            
+                for (var i = 0; i < objArray.length; i++) {
+                    var obj = objArray[i];
+                    //Pull out elements with a '_destroy' attribute. Call the DELETE endpoint for those.
+                    if (typeof obj['_destroy'] !== "undefined") {
+                        //Remove destroyed attribute, then add to delete array
+                        delete obj['_destroy'];//Clean up this attribute - SF can not cast it to sObject. Or do this after successful delete?
+                        destroyedElements.push(obj);
+                    }
+                }
+                
+                console.log('returning destroyed', destroyedElements);
+                return destroyedElements;
+            }
+            
+            self.persistCache = function(objsToPersist, succCb, errCb, delSuccCb, delErrorCb) {
+                
+                console.log('persisting objsToPersist', objsToPersist);
+                var objsToPost = self.filterNotDestroyed(objsToPersist);
+                var objsToDelete = self.filterDestroyed(objsToPersist);
+                
+                console.log('objsToPost', objsToPost);
+                console.log('objsToDelete', objsToDelete);
+                
+                //Filter nulls out of array, left by deleting elements (Must we still filter?)
+                //self.log.push('objsToPost : ' + ko.mapping.toJSON(objsToPost));
+                //var objsToPostFiltered = objsToPost.clean(undefined);
+                //console.log('objsToPostFiltered : ', objsToPostFiltered);
+                self.client.apexrest(
+                    '/Lead',//endpointUrl
+                    succCb,//callback
+                    errCb,//error
+                    'POST',//method
+                    ko.utils.stringifyJson(objsToPost),//payload
+                    { },//paramMap
+                    true//retry
+                );
+                
+                //self.log.push('objsToDelete : ' + ko.mapping.toJSON(objsToDelete));
+                self.deleteFromServer(objsToDelete, delSuccCb, delErrorCb);
+            
+            };
+            
+            self.deleteFromServer = function(objsToDelete, succCb, errCb) {
+                self.client.apexrest(
+                    '/Lead',//endpointUrl
+                    succCb,//callback
+                    errCb,//error
+                    'DELETE',//method
+                    ko.utils.stringifyJson(objsToDelete),//payload
+                    { },//paramMap
+                    true//retry
+                );
+            };
+        };
+        
+        
+        //App ViewModel for data binding
+        function AppViewModel() {
+            var self = this;
+            
+            //Util objects
+            self.forceClient = new forceDmlClient();
+            
+            //Form fields
+            self.filterFirstName = ko.observable("");
+            self.filterLastName = ko.observable("");
+            self.filterCompany = ko.observable("");
+            self.filterCity = ko.observable("");
+            self.filterState = ko.observable("");
+            self.filterToday = ko.observable(true);
+            
+            self.newFirstName = ko.observable("");
+            self.newLastName = ko.observable("");
+            self.newCompany = ko.observable("");
+            self.selectedAddress = ko.observable();
+            
+            //ViewModel fields
+            self.cacheLeads = ko.mapping.fromJS([]);
+            self.modelSchema = {Id:'', FirstName:'', LastName:'', Company:'', City:'', State:''};
+            
+            //Info fields
+            self.successAjax = ko.observable("");
+            self.errorsAjax = ko.observable("");
+            self.log = ko.observableArray([]);
+            
+            //Server mapping fields
+            self.mapping = {
+                key: function(item) {
+                    return ko.utils.unwrapObservable(item.Id);
+                },
+                'ignore': ["attributes", "City"],
+                'City': {
+                    create: function(options) {
+                        return (typeof options.data === 'undefined' ? '' : options.data);
+                    },
+                    update: function(options) {
+                        return (typeof options.data === 'undefined' ? '' : options.data);
+                    }
+                },
+                'State': {
+                    create: function(options) {
+                        return (typeof options.data === 'undefined' ? '' : options.data);
+                    }
+                }
+            }
+            
+            //Actions
+            self.actionUpdateCache = function() {
+            
+                var filter = {
+                    filterFirstName: ko.toJSON(self.filterFirstName),
+                    filterLastName: ko.toJSON(self.filterLastName),
+                    filterCompany: ko.toJSON(self.filterCompany),
+                    filterCity: ko.toJSON(self.filterCity),
+                    filterState: ko.toJSON(self.filterState),
+                    filterToday: ko.toJSON(self.filterToday)
+                };
+                self.forceClient.updateCache(
+                    filter,
+                    //succCb
+                    function(data, textStatus, jqXHR) {
+                        self.log.push('data : ' + ko.mapping.toJSON(data));
+                        $.each(data, function(i, mockItem){
+                            ko.mapping.addMissingProps(mockItem, self.modelSchema);
+                        });
+                        self.cacheLeads = ko.mapping.fromJS(data, self.mapping, self.cacheLeads);
+                        self.successAjax('cachedLeads : ' + ko.mapping.toJSON(self.cacheLeads));
+                    },
+                    //errCb
+                    function(jqXHR, textStatus, errorThrown) {
+                        var responseText = jqXHR.responseText.replace(/\r?\n/g, '');
+                        var responseObj = JSON.parse(responseText);
+                        self.errorsAjax(errorThrown + '\n' + responseObj[0]['message']);
+                });
+                
+            }
+            self.actionClearSuccessAjax = function() {
+                self.successAjax("");
+            };
+            self.actionClearErrorsAjax = function() {
+                self.errorsAjax("");
+            };
+            self.actionClearLogAjax = function() {
+                self.logAjax("");
+            };
+            
+            //TODO: This type of info should come from server.
+            self.leadAddresses = ko.observableArray([
+                new Address("--Select one--", ""),
+                new Address("Fargo", "ND"),
+                new Address("Moorhead", "MN"),
+                new Address("Fort Worth", "TX"),
+                new Address("Northfield", "MN"),
+                new Address("Eden Prairie", "MN")
+            ]);
+            
+            //Actions
+            self.validateAdd = function() {
+                if (self.newFirstName() != ""
+                    && self.newLastName() != ""
+                    && self.newCompany() != "") {
+                    return true;
+                }
+                else
+                    return false;
+            }
+            self.actionAddToCache = function() {
+                if (self.validateAdd()) {
+                    self.cacheLeads.push({
+                        Id: null,
+                        FirstName: ko.observable(self.newFirstName()),
+                        LastName: ko.observable(self.newLastName()),
+                        Company: ko.observable(self.newCompany()),
+                        City: ko.observable(self.selectedAddress().city),
+                        State: ko.observable(self.selectedAddress().state)
+                    });
+                    
+                    //Reset newLead inputs.
+                    self.newFirstName("");
+                    self.newLastName("");
+                    self.newCompany("");
+                    self.selectedAddress(self.leadAddresses()[0]);
+                }
+                else {
+                    self.errorsAjax('Problem with form data. Ensure all fields are filled.');
+                }
+            }
+            self.actionDestroyItem = function(element) {
+                self.log.push('destroying element : ' + element);
+                self.cacheLeads.destroy(element);//Adds a _destroy property to the element. We will deal with it later.
+                self.log.push('destroyed : ' + element);
+            }
+            
+            //Serialize and send to server
+            self.persistCache = function() {
+                self.forceClient.persistCache(
+                    ko.mapping.toJS(self.cacheLeads),
+                    //successCb
+                    function(data, textStatus, jqXHR) {
+                        console.log(JSON.stringify(data), textStatus, jqXHR);
+                        console.log('data', data);
+                        self.successAjax('persist success -- ' + textStatus);
+                        $.each(data, function(i, mockItem){
+                            ko.mapping.addMissingProps(mockItem, self.modelSchema);
+                        });
+                        self.cacheLeads = ko.mapping.fromJS(data, self.mapping, self.cacheLeads);
+                        console.log('self.cacheLeads', self.cacheLeads);
+                    },
+                    //errorCb
+                    function(jqXHR, textStatus, errorThrown) {
+                        console.log(jqXHR, textStatus, errorThrown);
+                        self.errorsAjax('persist error -- ' + textStatus);
+                    },
+                    //delSuccCb
+                    function(data, textStatus, jqXHR) {
+                        console.log(data, textStatus, jqXHR);
+                        self.successAjax('delete success -- ' + data);
+                    },
+                    //delErrorCb
+                    function(jqXHR, textStatus, errorThrown) {
+                        console.log(jqXHR, textStatus, errorThrown);
+                        self.errorsAjax('delete error -- ' + textStatus);
+                });
+            }
+        }
+        
+        ko.applyBindings(new AppViewModel());
+    </script>
+  
+</apex:page>
